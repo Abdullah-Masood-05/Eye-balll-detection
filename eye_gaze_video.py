@@ -68,23 +68,34 @@ def gaze_from_iris_in_box(iris, box):
     return rx, ry
 
 
-def infer_direction(rx, ry, label, th=0.25):
-    h_dir = "Center"
-    v_dir = "Center"
+prev_states = {"L": ("Center", "Center"), "R": ("Center", "Center")}
 
-    if rx < 0.5 - th:
+
+def infer_direction(rx, ry, label, th_x=0.18, th_y=0.15):
+    h_dir, v_dir = prev_states[label]
+
+    # Horizontal
+    if rx < 0.5 - th_x:
         h_dir = "Left"
-    elif rx > 0.5 + th:
+    elif rx > 0.5 + th_x:
         h_dir = "Right"
+    elif 0.45 <= rx <= 0.55:
+        h_dir = "Center"
 
-    if ry < 0.5 - th:
+    # Vertical
+    if ry < 0.5 - th_y:
         v_dir = "Up"
-    elif ry > 0.5 + th:
+    elif ry > 0.5 + th_y:
         v_dir = "Down"
+    elif 0.45 <= ry <= 0.55:
+        v_dir = "Center"
+
+    prev_states[label] = (h_dir, v_dir)
 
     print(
         f"Horizontal Direction: {h_dir}, Vertical Direction: {v_dir}\n"
-        f"Eye: {label} | rx: {rx}, ry: {ry}, rx_center: 0.5, Threshold: {th}"
+        f"Eye: {label} | rx: {rx:.3f}, ry: {ry:.3f}, "
+        f"rx_center: 0.5, ThresholdX: {th_x}, ThresholdY: {th_y}"
     )
     return h_dir, v_dir
 
