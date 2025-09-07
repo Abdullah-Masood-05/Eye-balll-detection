@@ -1,0 +1,5 @@
+.vscode/
+env/
+*.mp4
+test.py
+test2.py
