@@ -7,7 +7,7 @@ This project uses OpenCV and MediaPipe to detect eye landmarks and estimate gaze
 ### 1. Clone the Repository
 
 ```sh
-git clone <your-repo-url>
+git clone https://github.com/Abdullah-Masood-05/Eye-balll-detection.git
 cd Eye-balll-detection
 ```
 
