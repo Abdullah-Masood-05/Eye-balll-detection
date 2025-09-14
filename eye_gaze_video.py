@@ -520,39 +520,34 @@ class EnhancedGazeTracker:
 
 
 def main():
-    """Main function with enhanced options."""
-    parser = argparse.ArgumentParser(description='Enhanced Gaze Tracking with Improved Accuracy')
-    parser.add_argument('input_video', help='Path to input video file')
-    parser.add_argument('-o', '--output', help='Path to output video file')
-    parser.add_argument('--no-display', action='store_true', help='Disable real-time display')
-    parser.add_argument('--buffer-size', type=int, default=5, help='Temporal smoothing buffer size (default: 5)')
-    parser.add_argument('--confidence', type=float, default=0.7, help='Detection confidence threshold (default: 0.7)')
+    """Main function with static file input."""
+    # Static file paths
+    input_video = "eye_ball_2.mp4"  # Change this to your desired input file
+    output_path = "enhanced_gaze_tracked_output.mp4"
     
-    args = parser.parse_args()
-    
-    if not os.path.exists(args.input_video):
-        print(f"Error: Input video '{args.input_video}' not found.")
+    # Check if input file exists
+    if not os.path.exists(input_video):
+        print(f"Error: Input video '{input_video}' not found.")
+        print("Please make sure the file exists or update the input_video variable.")
         return
     
-    output_path = args.output
-    if output_path is None:
-        base_name = os.path.splitext(args.input_video)[0]
-        output_path = f"{base_name}_enhanced_gaze_tracked.mp4"
-    
-    # Create enhanced tracker
+    # Create enhanced tracker with default parameters
     tracker = EnhancedGazeTracker(
-        buffer_size=args.buffer_size,
-        confidence_threshold=args.confidence
+        buffer_size=5,          # Temporal smoothing buffer size
+        confidence_threshold=0.7  # Detection confidence threshold
     )
     
     print("Starting Enhanced Gaze Tracking...")
+    print(f"Input: {input_video}")
+    print(f"Output: {output_path}")
     print("Features: Head pose compensation, temporal smoothing, blink detection")
     print("Press 'q' to quit during playback")
     
+    # Process video with display enabled
     success = tracker.process_video(
-        args.input_video,
+        input_video,
         output_path,
-        display=not args.no_display
+        display=True  # Enable real-time display
     )
     
     if success:
@@ -560,12 +555,5 @@ def main():
     else:
         print("\nProcessing failed.")
 
-
 if __name__ == "__main__":
     main()
-
-
-# Enhanced usage examples:
-# python enhanced_gaze_tracker.py input_video.mp4
-# python enhanced_gaze_tracker.py input_video.mp4 --buffer-size 7 --confidence 0.8
-# python enhanced_gaze_tracker.py input_video.mp4 -o enhanced_output.mp4 --no-display
