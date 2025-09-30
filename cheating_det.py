@@ -6,20 +6,20 @@ from ultralytics import YOLO
 import time
 
 # ----------------- CONFIG -----------------
-YOLO_WEIGHTS = "yolov8s.pt"    # better than nano for accuracy
+YOLO_WEIGHTS = "yolov8s.pt"  # better than nano for accuracy
 CONF_THRESHOLD = 0.5
 MIN_BOX_AREA = 2000
 PERSON_CONF_THRESH = 0.5
 
-FRAME_THRESHOLD = 5            # persistence frames to trigger alert
-CALIBRATE_FRAMES = 30          # frames to compute neutral baseline
-SMOOTHING_WINDOW = 8           # smoothing window for angles
-GAZE_THRESHOLD_DEG = 20        # degrees away from baseline to consider "looking away"
+FRAME_THRESHOLD = 5  # persistce frames to trigger alert
+CALIBRATE_FRAMES = 30  # frames to compute neutral baseline
+SMOOTHING_WINDOW = 10  # smoothing window for angles
+GAZE_THRESHOLD_DEG = 55  # degrees away from baseline to consider "looking away"
 MULTI_PERSON_THRESHOLD = 1
-EYE_AWAY_SECONDS = 1.0         # how long eyes can be away before alert (horizontal)
+EYE_AWAY_SECONDS = 1.5  # how long eyes can be away before alert (horizontal)
 # Eye margin multipliers (tune these)
-H_MARGIN = 0.35   # horizontal tolerance (0.35 is fairly wide)
-V_MARGIN = 0.40   # vertical tolerance (0.25 avoids small up/down noise)
+H_MARGIN = 0.35  # horizontal tolerance (0.35 is fairly wide)
+V_MARGIN = 0.40  # vertical tolerance (0.25 avoids small up/down noise)
 # ------------------------------------------
 
 # load models
@@ -27,11 +27,13 @@ yolo = YOLO(YOLO_WEIGHTS)
 
 # MediaPipe: lightweight face detector (for counting) + face mesh for head pose/eyes
 mp_face_det = mp.solutions.face_detection.FaceDetection(min_detection_confidence=0.6)
-mp_face_mesh = mp.solutions.face_mesh.FaceMesh(static_image_mode=False,
-                                              max_num_faces=1,
-                                              refine_landmarks=True,
-                                              min_detection_confidence=0.6,
-                                              min_tracking_confidence=0.6)
+mp_face_mesh = mp.solutions.face_mesh.FaceMesh(
+    static_image_mode=False,
+    max_num_faces=1,
+    refine_landmarks=True,
+    min_detection_confidence=0.6,
+    min_tracking_confidence=0.6,
+)
 
 # Head-pose landmark indices
 LANDMARK_IDS = [1, 199, 33, 263, 61, 291]
@@ -49,14 +51,18 @@ RIGHT_EYE_TOP_IDX = 386
 RIGHT_EYE_BOTTOM_IDX = 374
 
 # 3D model points of the face
-MODEL_POINTS = np.array([
-    (0.0, 0.0, 0.0),        # Nose tip
-    (0.0, -63.6, -12.5),    # Chin
-    (-43.3, 32.7, -26.0),   # Left eye outer
-    (43.3, 32.7, -26.0),    # Right eye outer
-    (-28.9, -28.9, -24.1),  # Left mouth corner
-    (28.9, -28.9, -24.1)    # Right mouth corner
-], dtype=np.float64)
+MODEL_POINTS = np.array(
+    [
+        (0.0, 0.0, 0.0),  # Nose tip
+        (0.0, -63.6, -12.5),  # Chin
+        (-43.3, 32.7, -26.0),  # Left eye outer
+        (43.3, 32.7, -26.0),  # Right eye outer
+        (-28.9, -28.9, -24.1),  # Left mouth corner
+        (28.9, -28.9, -24.1),  # Right mouth corner
+    ],
+    dtype=np.float64,
+)
+
 
 # helpers
 def rotationMatrixToEulerAngles(R):
@@ -71,6 +77,7 @@ def rotationMatrixToEulerAngles(R):
         y = np.arctan2(-R[2, 0], sy)
         z = 0
     return np.degrees(np.array([x, y, z]))
+
 
 # smoothing deques & calibration accumulators
 yaw_buf = deque(maxlen=SMOOTHING_WINDOW)
@@ -96,7 +103,11 @@ eyes_vertical_currently_ok = True
 cap = cv2.VideoCapture(0)
 time.sleep(0.5)
 
-print("Auto-calibration will start once a face is detected and run for", CALIBRATE_FRAMES, "frames.")
+print(
+    "Auto-calibration will start once a face is detected and run for",
+    CALIBRATE_FRAMES,
+    "frames.",
+)
 print("Press 'q' to quit (or ESC). Press 'c' to recalibrate at any time.")
 
 while cap.isOpened():
@@ -113,13 +124,20 @@ while cap.isOpened():
         num_faces = len(face_det_res.detections)
         for det in face_det_res.detections:
             bbox = det.location_data.relative_bounding_box
-            x, y, bw, bh = int(bbox.xmin * w), int(bbox.ymin * h), int(bbox.width * w), int(bbox.height * h)
+            x, y, bw, bh = (
+                int(bbox.xmin * w),
+                int(bbox.ymin * h),
+                int(bbox.width * w),
+                int(bbox.height * h),
+            )
             cv2.rectangle(frame, (x, y), (x + bw, y + bh), (0, 255, 0), 1)
 
     # --- Face mesh & head pose (primary face only) ---
     mesh_res = mp_face_mesh.process(frame_rgb)
     head_pose_alert = False
-    yaw = None; pitch = None; roll = None
+    yaw = None
+    pitch = None
+    roll = None
     eyes_detected = False
     # Reset per-frame defaults (don't override global last timestamps)
     eyes_on_screen = False
@@ -136,14 +154,20 @@ while cap.isOpened():
         # camera intrinsics approximation
         focal_length = w
         center = (w / 2.0, h / 2.0)
-        camera_matrix = np.array([[focal_length, 0, center[0]],
-                                  [0, focal_length, center[1]],
-                                  [0, 0, 1]], dtype="double")
+        camera_matrix = np.array(
+            [[focal_length, 0, center[0]], [0, focal_length, center[1]], [0, 0, 1]],
+            dtype="double",
+        )
         dist_coeffs = np.zeros((4, 1))
 
         try:
             success, rotation_vector, translation_vector = cv2.solvePnP(
-                MODEL_POINTS, image_points, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
+                MODEL_POINTS,
+                image_points,
+                camera_matrix,
+                dist_coeffs,
+                flags=cv2.SOLVEPNP_ITERATIVE,
+            )
             if success:
                 rmat, _ = cv2.Rodrigues(rotation_vector)
                 angles = rotationMatrixToEulerAngles(rmat)
@@ -158,20 +182,41 @@ while cap.isOpened():
                     calib_pitches.append(pitch)
                     if calib_start_time is None:
                         calib_start_time = time.time()
-                    cv2.putText(frame, f"Calibrating head pose: {len(calib_yaws)}/{CALIBRATE_FRAMES}", (10, h - 20),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                    cv2.putText(
+                        frame,
+                        f"Calibrating head pose: {len(calib_yaws)}/{CALIBRATE_FRAMES}",
+                        (10, h - 20),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6,
+                        (0, 255, 255),
+                        2,
+                    )
                     if len(calib_yaws) >= CALIBRATE_FRAMES:
                         baseline_yaw = float(np.mean(calib_yaws))
                         baseline_pitch = float(np.mean(calib_pitches))
                         calibrated = True
-                        print(f"[Calibration done] baseline_yaw={baseline_yaw:.2f}, baseline_pitch={baseline_pitch:.2f}")
+                        print(
+                            f"[Calibration done] baseline_yaw={baseline_yaw:.2f}, baseline_pitch={baseline_pitch:.2f}"
+                        )
                 else:
                     smooth_yaw = float(np.mean(yaw_buf)) if len(yaw_buf) > 0 else yaw
-                    smooth_pitch = float(np.mean(pitch_buf)) if len(pitch_buf) > 0 else pitch
-                    if abs(smooth_yaw - baseline_yaw) > GAZE_THRESHOLD_DEG or abs(smooth_pitch - baseline_pitch) > GAZE_THRESHOLD_DEG:
+                    smooth_pitch = (
+                        float(np.mean(pitch_buf)) if len(pitch_buf) > 0 else pitch
+                    )
+                    if (
+                        abs(smooth_yaw - baseline_yaw) > GAZE_THRESHOLD_DEG
+                        or abs(smooth_pitch - baseline_pitch) > GAZE_THRESHOLD_DEG
+                    ):
                         head_pose_alert = True
-                    cv2.putText(frame, f"Yaw:{smooth_yaw:.1f} Pitch:{smooth_pitch:.1f}", (10, h - 50),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 0), 2)
+                    cv2.putText(
+                        frame,
+                        f"Yaw:{smooth_yaw:.1f} Pitch:{smooth_pitch:.1f}",
+                        (10, h - 50),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6,
+                        (200, 200, 0),
+                        2,
+                    )
 
             # --- Eye tracking using iris landmarks (468 & 473) with robust vertical logic ---
             try:
@@ -195,7 +240,9 @@ while cap.isOpened():
                 # horizontal bounds and widths (pixels)
                 l_min_x, l_max_x = min(l_c1[0], l_c2[0]), max(l_c1[0], l_c2[0])
                 r_min_x, r_max_x = min(r_c1[0], r_c2[0]), max(r_c1[0], r_c2[0])
-                l_width, r_width = max(1.0, l_max_x - l_min_x), max(1.0, r_max_x - r_min_x)
+                l_width, r_width = max(1.0, l_max_x - l_min_x), max(
+                    1.0, r_max_x - r_min_x
+                )
 
                 # --- robust vertical bounds using top/bottom eyelid landmarks (NOT corner Ys) ---
                 lt = face_lms.landmark[LEFT_EYE_TOP_IDX]
@@ -212,12 +259,28 @@ while cap.isOpened():
                 r_height = max(1.0, r_max_y - r_min_y)
 
                 # horizontal checks (with margin H_MARGIN)
-                left_ok_x = (l_min_x + H_MARGIN * l_width) <= left_iris[0] <= (l_max_x - H_MARGIN * l_width)
-                right_ok_x = (r_min_x + H_MARGIN * r_width) <= right_iris[0] <= (r_max_x - H_MARGIN * r_width)
+                left_ok_x = (
+                    (l_min_x + H_MARGIN * l_width)
+                    <= left_iris[0]
+                    <= (l_max_x - H_MARGIN * l_width)
+                )
+                right_ok_x = (
+                    (r_min_x + H_MARGIN * r_width)
+                    <= right_iris[0]
+                    <= (r_max_x - H_MARGIN * r_width)
+                )
 
                 # vertical checks (with margin V_MARGIN), using top/bottom eyelid landmarks
-                left_ok_y = (l_min_y + V_MARGIN * l_height) <= left_iris[1] <= (l_max_y - V_MARGIN * l_height)
-                right_ok_y = (r_min_y + V_MARGIN * r_height) <= right_iris[1] <= (r_max_y - V_MARGIN * r_height)
+                left_ok_y = (
+                    (l_min_y + V_MARGIN * l_height)
+                    <= left_iris[1]
+                    <= (l_max_y - V_MARGIN * l_height)
+                )
+                right_ok_y = (
+                    (r_min_y + V_MARGIN * r_height)
+                    <= right_iris[1]
+                    <= (r_max_y - V_MARGIN * r_height)
+                )
 
                 # if eye height is extremely small (unstable landmarks), be forgiving
                 if l_height < 3:
@@ -226,8 +289,8 @@ while cap.isOpened():
                     right_ok_y = True
 
                 # final decisions
-                eyes_on_screen = (left_ok_x and right_ok_x and left_ok_y and right_ok_y)
-                eyes_vertical_ok = (left_ok_y and right_ok_y)  # vertical-only check
+                eyes_on_screen = left_ok_x and right_ok_x and left_ok_y and right_ok_y
+                eyes_vertical_ok = left_ok_y and right_ok_y  # vertical-only check
 
                 # update states & timestamps
                 if eyes_on_screen:
@@ -237,13 +300,25 @@ while cap.isOpened():
                     last_eyes_on_screen_time = time.time()
                     last_eyes_vertical_time = time.time()
                     # draw debug dots
-                    cv2.circle(frame, (int(left_iris[0]), int(left_iris[1])), 3, (0, 255, 255), -1)
-                    cv2.circle(frame, (int(right_iris[0]), int(right_iris[1])), 3, (0, 255, 255), -1)
+                    cv2.circle(
+                        frame,
+                        (int(left_iris[0]), int(left_iris[1])),
+                        3,
+                        (0, 255, 255),
+                        -1,
+                    )
+                    cv2.circle(
+                        frame,
+                        (int(right_iris[0]), int(right_iris[1])),
+                        3,
+                        (0, 255, 255),
+                        -1,
+                    )
                 else:
                     # iris present but outside central band
                     eyes_detected = True
                     # horizontal status:
-                    if (left_ok_x and right_ok_x):
+                    if left_ok_x and right_ok_x:
                         # horizontally ok but maybe vertical off
                         eyes_currently_on_screen = True
                         last_eyes_on_screen_time = time.time()
@@ -257,14 +332,28 @@ while cap.isOpened():
                         eyes_vertical_currently_ok = False
 
                     # small debug markers
-                    cv2.circle(frame, (int(left_iris[0]), int(left_iris[1])), 2, (0, 120, 255), -1)
-                    cv2.circle(frame, (int(right_iris[0]), int(right_iris[1])), 2, (0, 120, 255), -1)
+                    cv2.circle(
+                        frame,
+                        (int(left_iris[0]), int(left_iris[1])),
+                        2,
+                        (0, 120, 255),
+                        -1,
+                    )
+                    cv2.circle(
+                        frame,
+                        (int(right_iris[0]), int(right_iris[1])),
+                        2,
+                        (0, 120, 255),
+                        -1,
+                    )
 
             except Exception:
                 # if iris/corners/top/bottom missing, treat as not detected (don't change last_eyes timestamps)
                 eyes_detected = False
                 eyes_currently_on_screen = False
-                eyes_vertical_currently_ok = True  # avoid vertical false alert when landmarks missing
+                eyes_vertical_currently_ok = (
+                    True  # avoid vertical false alert when landmarks missing
+                )
 
         except Exception:
             pass
@@ -293,7 +382,9 @@ while cap.isOpened():
         event_counters["eye_vertical"] = 0  # reset vertical counter when okay
 
     # --- YOLO: persons & suspicious items ---
-    yolo_results = yolo.predict(frame, conf=CONF_THRESHOLD, verbose=False)
+    yolo_results = yolo.predict(
+        frame, conf=CONF_THRESHOLD, verbose=False, device="cuda"
+    )
     person_count = 0
     suspicious_found = []
     for res in yolo_results:
@@ -313,7 +404,15 @@ while cap.isOpened():
             if label in {"cell phone", "book", "laptop", "tv", "monitor"}:
                 suspicious_found.append(label)
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                cv2.putText(frame, f"Susp:{label}", (x1, y1 - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
+                cv2.putText(
+                    frame,
+                    f"Susp:{label}",
+                    (x1, y1 - 6),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (0, 0, 255),
+                    2,
+                )
 
     # --- Build current events & update counters ---
     current_events = []
@@ -340,7 +439,16 @@ while cap.isOpened():
         current_events.append("eye_vertical")
 
     # update counters
-    for ev in ["no_face", "multi_face", "no_person", "multi_person", "suspicious", "head_pose", "eye_away", "eye_vertical"]:
+    for ev in [
+        "no_face",
+        "multi_face",
+        "no_person",
+        "multi_person",
+        "suspicious",
+        "head_pose",
+        "eye_away",
+        "eye_vertical",
+    ]:
         if ev in current_events:
             event_counters[ev] += 1
         else:
@@ -348,30 +456,102 @@ while cap.isOpened():
 
     # --- Trigger alerts ---
     if event_counters["no_face"] >= FRAME_THRESHOLD:
-        cv2.putText(frame, "ALERT: No face detected", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
+        cv2.putText(
+            frame,
+            "ALERT: No face detected",
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (0, 0, 255),
+            2,
+        )
     if event_counters["multi_face"] >= FRAME_THRESHOLD:
-        cv2.putText(frame, "ALERT: Multiple faces", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
+        cv2.putText(
+            frame,
+            "ALERT: Multiple faces",
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (0, 0, 255),
+            2,
+        )
     if event_counters["no_person"] >= FRAME_THRESHOLD:
-        cv2.putText(frame, "ALERT: No person", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
+        cv2.putText(
+            frame,
+            "ALERT: No person",
+            (10, 60),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (0, 0, 255),
+            2,
+        )
     if event_counters["multi_person"] >= FRAME_THRESHOLD:
-        cv2.putText(frame, f"ALERT: Multiple persons ({person_count})", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
+        cv2.putText(
+            frame,
+            f"ALERT: Multiple persons ({person_count})",
+            (10, 60),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (0, 0, 255),
+            2,
+        )
     if event_counters["suspicious"] >= FRAME_THRESHOLD:
-        cv2.putText(frame, "ALERT: Suspicious object", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
+        cv2.putText(
+            frame,
+            "ALERT: Suspicious object",
+            (10, 90),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (0, 0, 255),
+            2,
+        )
     if event_counters["head_pose"] >= FRAME_THRESHOLD:
-        cv2.putText(frame, "ALERT: Looking away (head)", (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
+        cv2.putText(
+            frame,
+            "ALERT: Looking away (head)",
+            (10, 120),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (0, 0, 255),
+            2,
+        )
     if event_counters["eye_away"] >= FRAME_THRESHOLD:
-        cv2.putText(frame, "ALERT: Eyes not on screen (left/right)", (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
+        cv2.putText(
+            frame,
+            "ALERT: Eyes not on screen (left/right)",
+            (10, 150),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 0, 255),
+            2,
+        )
     if event_counters["eye_vertical"] >= FRAME_THRESHOLD:
-        cv2.putText(frame, "ALERT: Eyes looking up/down", (10, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
+        cv2.putText(
+            frame,
+            "ALERT: Eyes looking up/down",
+            (10, 180),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 0, 255),
+            2,
+        )
 
-    cv2.putText(frame, f"Faces:{num_faces} Persons:{person_count}", (10, h - 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
+    cv2.putText(
+        frame,
+        f"Faces:{num_faces} Persons:{person_count}",
+        (10, h - 80),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.6,
+        (0, 255, 0),
+        2,
+    )
 
     cv2.imshow("Exam Monitor (press q to quit, c to recalibrate)", frame)
 
     key = cv2.waitKey(1) & 0xFF
-    if key == ord('q') or key == ord('Q') or key == 27:
+    if key == ord("q") or key == ord("Q") or key == 27:
         break
-    if key == ord('c') or key == ord('C'):
+    if key == ord("c") or key == ord("C"):
         calibrated = False
         calib_yaws.clear()
         calib_pitches.clear()
