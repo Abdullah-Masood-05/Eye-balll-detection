@@ -31,7 +31,7 @@ class PupilGazeTracker:
 
         # Thresholds for direction detection
         self.h_threshold = 0.15  # horizontal sensitivity
-        self.v_threshold = 0.20  # vertical sensitivity
+        self.v_threshold = 0.10  # vertical sensitivity
 
     def extract_eye_region(self, frame, landmarks, eye_indices, img_width, img_height):
         """Extract the eye region."""

@@ -30,7 +30,7 @@ class PupilGazeTracker:
         
         # Thresholds for direction detection (as percentage of eye width/height)
         self.h_threshold = 0.15  # 15% from center
-        self.v_threshold = 0.20  # 20% from center
+        self.v_threshold = 0.10  # 20% from center
 
     def extract_eye_region(self, frame, landmarks, eye_indices, img_width, img_height):
         """Extract the eye region as white background with pupil tracking."""
